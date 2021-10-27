@@ -73,10 +73,11 @@ int main(int argc, char** argv) {
     B.cols = cols;
   }
 
+  printf("rank = %d \n", rank);
   Vector b;
   b.length = rows;
 
-  if(rank == ROOT){
+  // if(rank == ROOT){
     b.data = malloc(rows * sizeof(double));
   
     int count=1;
@@ -85,10 +86,10 @@ int main(int argc, char** argv) {
       
     }
 
+  // }
+
     gauss_j(A,b);
 
-
-  }
   
 
   // //  do not try to print unless you are the root since the other nodes have

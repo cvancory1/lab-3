@@ -17,18 +17,23 @@ int worldSize, rank;
 char name[MPI_MAX_PROCESSOR_NAME];
 int nameLen;
 
-
 typedef struct Matrix {
   int rows;
   int cols;
-  double *data;
+  int *data;
 } Matrix;
+
+// data = double
+typedef struct MatrixD {
+  int rows;
+  int cols;
+  double *data;
+} MatrixD;
 
 typedef struct Vector {
   double *data;
   int length;
 } Vector;
-
 
 void initMatrix(Matrix *A, int rows, int cols) {
   A->rows = rows;
@@ -36,17 +41,17 @@ void initMatrix(Matrix *A, int rows, int cols) {
   A->data = malloc(A->rows * A->cols * sizeof(int));
 }
 
-  // // to error check 
-  // char *arrbuf = bufArr(recvbufA, sendcts[rank]);
-  // printf("Rank %d received %s\n", rank, arrbuf);
-  // arrbuf = bufArr(recvbufB, sendcts[rank]);
-  // printf("\nRank %d received %s\n", rank, arrbuf);
-char *bufArr(int *arr, int n) {
-  char *buf = malloc(n * (4 + 1) + 1);
+// // to error check
+// char *arrbuf = bufArr(recvbufA, sendcts[rank]);
+// printf("Rank %d received %s\n", rank, arrbuf);
+// arrbuf = bufArr(recvbufB, sendcts[rank]);
+// printf("\nRank %d received %s\n", rank, arrbuf);
+char *bufArr(double *arr, int n) {
+  char *buf = malloc(n * (10 + 1) + 1);
   buf[0] = '\0';
 
-  const char *fmt = "%4d ";
-  char tmp[4 + 1 + 1];  // same width as fmt plus a null term
+  const char *fmt = "%0.4f ";
+  char tmp[10 + 1 + 1];  // same width as fmt plus a null term
 
   for (int i = 0; i < n; i++) {
     sprintf(tmp, fmt, arr[i]);
@@ -73,7 +78,7 @@ void printArr(Matrix A) {
 void printMatrx(Matrix A) {
   for (int i = 0; i < A.rows; i++) {
     for (int j = 0; j < A.cols; j++) {
-      printf("%2f ", ACCESS(A, i, j));
+      printf("%2d ", ACCESS(A, i, j));
     }
     printf("\n");
   }
@@ -89,6 +94,33 @@ typedef struct SGData {
 Take the dimensions of a matrix and do the calculations to either
 scatter or gather the rows
  */
+SGData getGaussCounts(int rows, int cols, int worldSize) {
+  SGData temp;
+  temp.cnts = malloc(worldSize * sizeof(double));
+  temp.displs = malloc(worldSize * sizeof(double));
+
+  int minSend = rows / worldSize;
+  for (int i = 0; i < worldSize; i++) {
+    temp.cnts[i] = minSend;
+  }
+
+  for (int i = 0; i < rows % worldSize; i++) {
+    temp.cnts[i]++;
+  }
+
+  for (int i = 0; i < worldSize; i++) {
+    temp.cnts[i] *= cols;
+    // printf("sendcount=%d\n",temp.cnts[i]);
+  }
+
+  temp.displs[0] = 0;
+  for (int i = 1; i < worldSize; i++) {
+    temp.displs[i] = temp.displs[i - 1] + temp.cnts[i - 1];
+  }
+
+  return temp;
+}
+
 SGData getSGCounts(int rows, int cols, int worldSize) {
   SGData temp;
   temp.cnts = malloc(worldSize * sizeof(int));
@@ -115,37 +147,36 @@ SGData getSGCounts(int rows, int cols, int worldSize) {
 
   return temp;
 }
-
 /*
 
-  2 dummy functions call this. Addition and subtraction of matricies use the same logic 
+  2 dummy functions call this. Addition and subtraction of matricies use the
+  same logic
 */
 Matrix matrix_add_sub(Matrix A, Matrix B, int operationType) {
-  
-  SGData AB_counts = getSGCounts(A.rows , A.cols , worldSize);
+  SGData AB_counts = getSGCounts(A.rows, A.cols, worldSize);
 
   /*  make containers for the nodes to receive their data after the scatter */
   int *recvbufA = malloc(AB_counts.cnts[rank] * sizeof(int));
   int *recvbufB = malloc(AB_counts.cnts[rank] * sizeof(int));
 
   /*  scatter two matricies A & B  to add*/
-  MPI_Scatterv(A.data,         // sendbuf
+  MPI_Scatterv(A.data,                // sendbuf
                AB_counts.cnts,        // sendcnts
-               AB_counts.displs,         // displacements
-               MPI_INT,        // datatype
-               recvbufA,       // recvbuf
+               AB_counts.displs,      // displacements
+               MPI_INT,               // datatype
+               recvbufA,              // recvbuf
                AB_counts.cnts[rank],  // recvcnt
                MPI_INT, ROOT, world);
 
-  MPI_Scatterv(B.data,         // sendbuf
+  MPI_Scatterv(B.data,                // sendbuf
                AB_counts.cnts,        // sendcnts
-               AB_counts.displs,         // displacements
-               MPI_INT,        // datatype
-               recvbufB,       // recvbuf
+               AB_counts.displs,      // displacements
+               MPI_INT,               // datatype
+               recvbufB,              // recvbuf
                AB_counts.cnts[rank],  // recvcnt
                MPI_INT, ROOT, world);
 
-  /* each node computes a row of  Matrix C */ 
+  /* each node computes a row of  Matrix C */
   int *sumArr = malloc(AB_counts.cnts[rank] * sizeof(int));
   if (operationType == 0) {
     for (int i = 0; i < AB_counts.cnts[rank]; i++) {
@@ -159,7 +190,7 @@ Matrix matrix_add_sub(Matrix A, Matrix B, int operationType) {
     }
   }
 
-  /* Matrix C gets made for the gather */ 
+  /* Matrix C gets made for the gather */
   Matrix C;
   if (rank == ROOT) {
     initMatrix(&C, A.rows, A.cols);
@@ -170,24 +201,24 @@ Matrix matrix_add_sub(Matrix A, Matrix B, int operationType) {
   }
 
   MPI_Gatherv(
-      sumArr,         // sendbuf - address of send buffer,
-      AB_counts.cnts[rank],  // sendcut-number of elements in send buffer( array )
-      MPI_INT,        // stype - data type of send buff elements
-      C.data,         // rbuf - address of receive containter
-      AB_counts.cnts,        // recvcount- arr of size amount being received from each
-                      // process
-      AB_counts.displs,         // displs
-      MPI_INT,        // data type of recv buffer
+      sumArr,  // sendbuf - address of send buffer,
+      AB_counts
+          .cnts[rank],  // sendcut-number of elements in send buffer( array )
+      MPI_INT,          // stype - data type of send buff elements
+      C.data,           // rbuf - address of receive containter
+      AB_counts.cnts,  // recvcount- arr of size amount being received from each
+                       // process
+      AB_counts.displs,  // displs
+      MPI_INT,           // data type of recv buffer
       ROOT, world);
-
 
   return C;
 }
 
 /*
   dummy function for main to access and add 2 matricies
-  call matrix_add_sub with a 1 to denote addition 
-*/ 
+  call matrix_add_sub with a 1 to denote addition
+*/
 Matrix matrixAdd(Matrix A, Matrix B) {
   Matrix C;
   C.data = NULL;
@@ -208,8 +239,8 @@ Matrix matrixAdd(Matrix A, Matrix B) {
 
 /*
   dummy function for main to access and subtract 2 matricies
-  call matrix_add_sub with a 1 to denote subtraction 
-*/ 
+  call matrix_add_sub with a 1 to denote subtraction
+*/
 
 Matrix matrixSub(Matrix A, Matrix B) {
   Matrix C;
@@ -259,7 +290,7 @@ Matrix transpose(Matrix A) {
 }
 
 /*
-  scatters rows of matrix A , and bcasts matrix B to all other nodes 
+  scatters rows of matrix A , and bcasts matrix B to all other nodes
   calcs the multplicatation for all nodes afterwards
 */
 Matrix multiply(Matrix A, Matrix B) {
@@ -289,47 +320,46 @@ Matrix multiply(Matrix A, Matrix B) {
     C.rows = A.rows;
     C.cols = B.cols;
   }
-  SGData A_counts = getSGCounts(A.rows , A.cols , worldSize);
+  SGData A_counts = getSGCounts(A.rows, A.cols, worldSize);
 
-  /*  container for the nodes to receive their a row from Matrix A*/ 
+  /*  container for the nodes to receive their a row from Matrix A*/
   int *recvbufA = malloc(A_counts.cnts[rank] * sizeof(int));
 
-    MPI_Scatterv(A.data,          // sendbuf
-                 A_counts.cnts,        // sendcnts
-                 A_counts.displs,         // displacements
-                 MPI_INT,         // datatype
-                 recvbufA,        // recvbuf
-                 A_counts.cnts[rank],  // recvcnt
-                 MPI_INT, ROOT, world);
+  MPI_Scatterv(A.data,               // sendbuf
+               A_counts.cnts,        // sendcnts
+               A_counts.displs,      // displacements
+               MPI_INT,              // datatype
+               recvbufA,             // recvbuf
+               A_counts.cnts[rank],  // recvcnt
+               MPI_INT, ROOT, world);
 
-    /* make container for bT which gets broadcasted by all other nodes*/
-    if (rank != ROOT) {
-      bT.data = malloc(bT.rows * bT.cols * sizeof(int));
+  /* make container for bT which gets broadcasted by all other nodes*/
+  if (rank != ROOT) {
+    bT.data = malloc(bT.rows * bT.cols * sizeof(int));
+  }
+  MPI_Bcast(bT.data, bT.rows * bT.cols, MPI_INT, ROOT, world);
+
+  int sum = 0;
+  int *sumArr = malloc(C.cols * sizeof(int));
+  int rowOffset = 0;
+  for (int i = 0; i < C.rows; i++) {
+    for (int j = 0; j < C.cols; j++) {
+      sum += recvbufA[j] * bT.data[j + rowOffset];
     }
-    MPI_Bcast(bT.data, bT.rows * bT.cols, MPI_INT, ROOT, world);
+    sumArr[i] = sum;
+    rowOffset += bT.rows;
+    sum = 0;
+  }
 
-    int sum = 0;
-    int *sumArr = malloc(C.cols * sizeof(int));
-    int rowOffset = 0;
-    for (int i = 0; i < C.rows; i++) {
-      for (int j = 0; j < C.cols; j++) {
-        sum += recvbufA[j] * bT.data[ j + rowOffset];
-      }
-      sumArr[i] = sum;
-      rowOffset += bT.rows;
-      sum =0;
-      
-    }
-
-    SGData C_counts = getSGCounts(C.rows , C.cols , worldSize);
-    MPI_Gatherv(sumArr,         // sendbuf - address of send buffer,
-              C_counts.cnts[rank],  // sendcut-number of elements in send buffer, 
-              MPI_INT,        // stype - data type of send buff elements
-              C.data,         // rbuf - address of receivecontainter
-              C_counts.cnts,        // rount- arr of amount being received  from each
-              C_counts.displs,         // displs MPI_INT,  //   data type of recv
-              MPI_INT, ROOT, world);
-
+  SGData C_counts = getSGCounts(C.rows, C.cols, worldSize);
+  MPI_Gatherv(
+      sumArr,               // sendbuf - address of send buffer,
+      C_counts.cnts[rank],  // sendcut-number of elements in send buffer,
+      MPI_INT,              // stype - data type of send buff elements
+      C.data,               // rbuf - address of receivecontainter
+      C_counts.cnts,        // rount- arr of amount being received  from each
+      C_counts.displs,      // displs MPI_INT,  //   data type of recv
+      MPI_INT, ROOT, world);
 
   // free (C_counts.displs);
   // free (C_counts.cnts);
@@ -337,42 +367,221 @@ Matrix multiply(Matrix A, Matrix B) {
 }
 
 
-//TODO : add error checking if a non-root node calls this function 
-void gauss_j(Matrix A ,Vector b ){
-  Vector l; 
-  l.length = A.rows;
-  l.data = malloc(A.rows * sizeof(double));
-  printf("l - length = %d \n", l.length);
+//QUESTION - how does this work if we used the lab2 version where all nodes are already working 
+// how could we use that scattered version where each takes a piece 
+// returns the vector scaled by value 
+void scalarByVector(double * arr, int size , int scalar) {
+  for(int i =0 ; i<size ; i++){
+    arr[i] = arr[i] * scalar;
+  }
 
-  if(A.cols < A.rows){
+
+}
+
+
+
+
+
+
+// TODO : add error checking if a non-root node calls this function
+void gauss_j(MatrixD A, Vector b) {
+  /*  Error checking  */
+  if (A.cols < A.rows) {
     puts(" A's cols must be greater or equal to the rows");
     // return 1;
   }
-  
-  // todo: is there an edge case where the top left column is 0 ? 
-  for(int k =0 ; k < A.rows ; k++){ // for each pivot row
-      double denom;
-      if(rank == ROOT ){
-        denom = ACCESS(A,k,k);
-        // printf("k =%f denom = %f ", k, denom );
-      }
-    for(int i =0 ; i < A.rows ; i++){ // for 1, ... , n 
-      if(rank == ROOT ){
-        l.data[i] = ACCESS(A,i,k) / denom; 
-        printf("l.data[i] = %f ACCESS(A,i,k)= %f denom=%f \n", l.data[i], ACCESS(A,i,k), denom);
 
+ 
+  /*
+      Calc - sendcounts to scatter matrix A
+      Allocate for local container A
+      scatter A
+  */
+
+  // printf("A.rows= %d A.cols= %d \n",A.rows, A.cols );
+  SGData A_counts = getGaussCounts(A.rows, A.cols, worldSize);
+
+  // printf("rank = %d sendcounts = %d\n", rank , A_counts.cnts[rank] );
+  MatrixD localA;
+  localA.rows = A_counts.cnts[rank] / A.rows % A.rows;
+  localA.cols = A.cols;
+  localA.data = malloc(A_counts.cnts[rank] * sizeof(double));
+
+  // printf("LOCAL rank = %d  A.rows= %d A.cols= %d  A_counts.cnts[rank] =%d\n",rank, localA.rows,  localA.cols, A_counts.cnts[rank] );
+
+  // if (rank == 0) {
+  //   printArr(A);
+  // }
+
+  /*  scatters A by rows so each processor can calc and update A in every iteration of outermost for loop  */
+
+  MPI_Scatterv(A.data,               // sendbuf
+               A_counts.cnts,        // sendcnts
+               A_counts.displs,      // displacements
+               MPI_DOUBLE,           // datatype
+               localA.data,          // recvbuf
+               A_counts.cnts[rank],  // recvcnt
+               MPI_DOUBLE, ROOT, world);
+
+  // error check what everyone is recv
+  // for(int i =0 ;i< localA.rows * localA.cols ;i++){
+    // printf("rank = %d  localA[%d]= %f\n", rank , i, localA.data[i] );
+  // }
+  // printf("rank = %d  A_counts.cnts[rank]= %d\n", rank , A_counts.cnts[rank]);
+
+  // arr that holds which row of l to send out
+  // TODO: bcast this to all nodes OR just have the root check every time
+
+
+  /*  using the sendcounts from above create an array which stores which proccessor is in charge of a 
+      corresponding row k . ex:  pivotTracker[3] = 2 ... so row 3 is being calc by proccessor 2  */
+      
+
+
+  // created so all other nodes "know" which rows each processor is in charge of
+  int *pivotTracker= malloc(A.rows * sizeof(double));
+  if (rank == ROOT) {
+    int index = 0;
+    int total = A_counts.cnts[index];
+    pivotTracker[index] = index;
+
+    for (int i = 0; i < A.rows; i++) {
+      total -= A.rows;
+      pivotTracker[i] = index;
+      if (total == 0) {
+        index++;
+        total = A_counts.cnts[index];
       }
     }
-    // puts(" here\n");
-
-    MPI_Bcast(l.data , l.length , MPI_INT , ROOT, world);
-    printf("rank  = %d \n", rank);
-
-
-    // for(int i = 0 ; i < l.length ;i++){
-    //   printf("rank  = %d data=%d ", rank, l.data[i]);
-    // }
-
+    if (rank == ROOT) {
+      for (int i = 0; i < A.rows; i++) {
+        // printf("pivotTracker=%d\n", pivotTracker[i]);
+      }
+    }
   }
+  MPI_Bcast(pivotTracker, A.rows , MPI_DOUBLE, ROOT , world);
+
+
+
+  // // /*    begin Alg    */
+  // /*   Workflow: broadcast pivot row which will also hold the pivot to divide by later... 
+  // So we need to communicate and coordinate with all nodes about who is sending the pivot row (which is why we have the pivotTracker array )
+  // once we brodcast the correct pivot row. Have each proccessor find the pivot. 
+  // Then all nodes calculate their local 'l'  lki = Ai,k /Ak,k ∀i = 1, . . . , n.
+  // next steps ... have every proccessor calculate their "new" rows using this formula Ar,c ← Ar,c − lkr · Ak,c  */
+
+
+  // // for(int k =0 ; k < A.rows ; k++){ // for each pivot row
+  // int k=0;
+  // int localCount=0;  // counts how many times a node will be the pivot row 
+  // while(k < A.rows){
+  //   // rank is going to be sending l 
+  //   double * pivotRow = malloc(localA.cols* sizeof(double)); 
+
+  //   MPI_Barrier(world);
+  //   if(rank == pivotTracker[k] ){
+  //     // printf("Enter rank = %d pivot tracker = %d , k = %d localCount = %d\n", rank ,pivotTracker[k] , k, localCount);
+  //     for(int i =0; i <localA.cols ;i++ ){
+  //       pivotRow[i] = ACCESS(localA, localCount, i);
+  //       // printf("Enter rank = %d  pivotRow[i] = %f , k = %d \n", rank ,ACCESS(localA, localCount, i), k );
+  //     }
+  //     // char* buf = bufArr(pivotRow, localA.cols);
+  //     // printf("It %d Rank %d has pivot row: %s\n", k, rank, buf); free(buf);
+  //     localCount++;
+  //     // if(localCount == localA.rows ) localCount=0;
+
+  //   }
+    
+
+  //   MPI_Bcast(pivotRow, localA.cols , MPI_DOUBLE, pivotTracker[k], world);
+  //   // char *arrbuf = bufArr(pivotRow, localA.cols);
+  //   // printf("it %d Rank %d received %s\n", k, rank, arrbuf);
+
+
+  //   MPI_Barrier(world);
+  //   double denom = pivotRow[k];
+
+  //   // printf("it %d Enter rank = %d denom = %f \n",k, rank, denom);
+
+  //   //TODO : make this a vector later? 
+  //   double * l = malloc(localA.rows * sizeof(double)); // everyone allocate their local version of l 
+  //   for(int i =0; i < localA.rows ;i++){ // compute l 
+  //     l[i] = ACCESS(localA, i , k ) / denom ;
+  //     printf("Enter rank = %d l[i] = %f num = %f denom = %f \n",rank, l[i], ACCESS(localA, i , k ),  denom);
+  //   }
+
+  //   // error checking- L vector to ensure it is correct after every iteration
+  //   // if(rank ==ROOT){
+  //   //   for(int i =0; i < localA.rows ;i++){ // compute l 
+  //   //     printf("Enter rank = %d l[i] = %f num = %f denom = %f \n",rank, l[i], ACCESS(localA, i , k ),  denom);
+  //   //   }
+
+  //   // }
+    
+
+  //   // double testSum = malloc ( localA.cols * sizeof(double));
+  //   // compute Ar,c ← Ar,c − lkr · Ak,c
+  //   for(int row = 0 ;row <localA.rows ;row++){ 
+  //     for(int cols = 0 ;cols <localA.cols ;cols++){ 
+  //     //  ACCESS(localA, row , cols ) = ACCESS(localA, row , cols ) - l[cols]* pivotRow[cols];
+  //       // testSum[cols]= ACCESS(localA, row , cols ) - l[cols]* pivotRow[cols];
+
+  //       if(rank == 1 ){
+  //         printf("ACCESS(localA, row , cols )= %f  - l[i]=%f pivotRow[i]=%f \n", ACCESS(localA, row , cols ), l[row],pivotRow[cols]);
+  //       }
+  //     }
+  //   }
+
+    
+
+  //   k++;
+
+  //   // for (int i = 0; i < localA.cols ; i++) {
+  //   //   printf("rank = %d pivotRow=%1.f\n",rank,  pivotRow[i]);
+  //   // }
+
+  //   puts("");
+  // }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 }
