@@ -32,7 +32,7 @@ int main(int argc, char** argv) {
   // initial set up of creating and filling Matrix A & B
   int rows = 5;
   int cols = 5;
-  Matrix A, B; 
+  MatrixD A, B; 
 
   if (rank == ROOT) {
     A.rows = rows;
@@ -57,8 +57,9 @@ int main(int argc, char** argv) {
 
     for (int i = 0; i < rows; i++) {
       for (int j = 0; j < cols; j++) {
-        // printf("%4d ", ACCESS(A, i, j));
-        // printf("%4d ", ACCESS(B, i, j));
+        // printf("%4f ", ACCESS(A, i, j));
+        // printf("%4f ", ACCESS(B, i, j));
+
       }
       // printf("\n");
     }
@@ -73,125 +74,71 @@ int main(int argc, char** argv) {
     B.cols = cols;
   }
 
-  printf("rank = %d \n", rank);
+  // printf("rank = %d \n", rank);
   Vector b;
   b.length = rows;
 
-  // if(rank == ROOT){
+  if(rank == ROOT){
     b.data = malloc(rows * sizeof(double));
-  
     int count=1;
     for(int i =0; i< rows ; i++){
       b.data[i] = count++;
-      
+    }
+  }
+
+
+
+
+  /* when calling make sure there are no 0's off the main diag*/
+  // gauss_j(A,b);
+
+
+
+
+  /*Testing Kalyns Matrix */
+
+  MatrixD C;
+  C.rows = 3;
+  C.cols = 3;
+  if (rank == ROOT) {
+   
+    C.data = malloc(C.rows * C.cols * sizeof(double));
+
+    
+    int hardCoded [] = {1,4,2 ,1,2,3,2,1,3};
+    for (int i = 0; i < C.cols * C.rows; i++) {
+      C.data[i] = hardCoded[i];
+      // printf("i = %d data = %f\n", i , C.data[i]);
     }
 
-  // }
+  } else if (rank != ROOT) {
+    // for all other nodes define what A is for them, prevents seg faults
+    C.data = NULL;
+  }
 
-    gauss_j(A,b);
 
+  puts("");
+
+  MatrixD vectorB;
+  vectorB.rows = 3;
+  vectorB.cols = 1;
+
+  if(rank ==0 ){
+   vectorB.data = malloc( vectorB.rows * vectorB.cols * sizeof(double));
+    int vectorHardCoded [] = {11,11,13};
+    for (int i = 0; i < vectorB.rows ; i++) {
+      vectorB.data[i] = vectorHardCoded[i];
+        // printf("i = %d data = %f\n", i , vectorB.data[i]);
+    }
+
+  }else{
+    vectorB.data =NULL;
+  }
   
+ 
 
-  // //  do not try to print unless you are the root since the other nodes have
-  // //  empty Matricies
-  // Matrix D = matrixAdd(A,B);
-  // if(rank ==ROOT){
-  //   printf("testing adding A +B  matricies\n");
-  //   printf("A:\n");
-  //   printMatrx(A);
+  gauss_j(C,vectorB);
 
-  //   printf("B:\n");
-  //   printMatrx(B);
-  //   printf("result :\n");
-
-  //   printMatrx(D);
-  // }
-
-  // Matrix E = matrixSub(A,B);
-  // if(rank ==ROOT){
-  //   printf("testing adding A -B  matricies ....will equal the 0 matrix \n");
-  //   printMatrx(E);
-  // }
-
-  //  testing if unmatched matricies for addition and subtraction
-  // if(rank ==ROOT){
-  //   printf("\ntesting with two matricies that cannot be added or subtracted\n");
-  //   A.cols = B.cols +1;
-  //   matrixAdd(A,B);
-  // }
-  
-
-  // Matrix aT = transpose(A);
-  // if (rank == ROOT) {
-  //   printf("transpose before\n");
-  //   printMatrx(A);
-
-  //   printf("transpose after\n");
-  //   printMatrx(aT);
-  // }
-
-  // // if(argc!= 2){
-  // //   puts("error- multplication requres two arguments");
-  // //   return 1; 
-  // // }
-
-  // Matrix F, G;
-  // int F_rows, F_cols, G_rows, G_cols;
-  // F_rows = atoi(argv[1]);
-  // F_cols = atoi(argv[2]);
-  // G_rows = atoi(argv[1]);
-  // G_cols = atoi(argv[2]);
-
-
-  // if (rank == ROOT) {
-  //   initMatrix(&F, F_rows, F_cols);
-  //   initMatrix(&G, G_rows, G_cols);
-  //   int count = 1;
-  //   for (int i = 0; i < F.cols * F.rows; i++) {
-  //     F.data[i] = count++;
-  //   }
-  //   count = 1;
-  //   for (int i = 0; i < G.cols * G.rows; i++) {
-  //     G.data[i] = count++;
-  //   }
-
-  // } else {
-  //   F.data = NULL;
-  //   F.rows = F_rows;
-  //   F.cols = F_cols;
-
-  //   G.data = NULL;
-  //   G.rows = G_rows;
-  //   G.cols = G_cols;
-  // }
-
-  // if (rank == ROOT) {
-  //   printf("Testing matrix multiplication F 5x6 , G 6x5 \n");
-  //   printf("-------\n");
-  //   printf("printing F \n");
-  //   printMatrx(F);
-  //   printf("\nprinting G \n");
-  //   printMatrx(G);
-  //   printf("-------\n");
-  // }
-
-  // Matrix C = multiply(F, G);
-  // if (rank == ROOT){
-  //   printf("\nprinting multplication  \n");
-  //   printMatrx(C);
-  //   printf("-------\n");
-  // }
-
-
-
-  // // free(A.data);
-  // // free(aT.data);
-  // // free(B.data);
-  // // free(C.data);
-  // // free(D.data);
-  // // free(E.data);
-  // // free(F.data);
-  // // free(G.data);
 
 
 
