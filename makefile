@@ -2,7 +2,7 @@
 
 program: main.o
 	mpicc -std=c99 main.o -o matrixMain
-	mpirun -n 5 ./matrixMain
+	mpirun -n 3 ./matrixMain
 
 main.o: main.c matrixFunctions.h
 	mpicc -std=c99 -c main.c
@@ -22,13 +22,30 @@ test:
 	time   mpirun -n 10 ./time 30000 30000
 	time   mpirun -n 10 ./time 40000 40000
 
+timeGJ: timingGJ.o
+	mpicc -std=c99 timingGJ.o -o timeGJ		
+	mpirun -n 5 ./timeGJ 100 100
+	
 
-# commitTest:
-# 	git add timing.txt
-# 	git commit -m"send timing"
-# 	git push
+timingGJ.o: timingGJ.c matrixFunctions.h
+	mpicc -std=c99 -c timingGJ.c
+
+testGJ:
+	time  mpirun -n 10 ./timeGJ 100 100 
+	time  mpirun -n 10 ./timeGJ 1000 1000
+	time  mpirun -n 10 ./timeGJ 10000 10000
+	time   mpirun -n 10 ./timeGJ 20000 20000
+	time   mpirun -n 10 ./timeGJ 30000 30000
+	time   mpirun -n 10 ./timeGJ 40000 40000
+
+file: fileread.o
+	mpicc -std=c99 fileread.o -o fileMain
+	mpirun -n 3 ./fileMain
+
+fileread.o: fileread.c matrixFunctions.h
+	mpicc -std=c99 -c fileread.c
+
 
 clean:
 	rm *.o
 	rm time
-	rm matrixMain
