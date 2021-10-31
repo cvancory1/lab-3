@@ -383,7 +383,7 @@ Matrix multiply(Matrix A, Matrix B) {
 }
 
 
-void gauss_j(MatrixD A, MatrixD B) {
+MatrixD gauss_j(MatrixD A, MatrixD B) {
   /*  Error checking  */
   if (A.cols < A.rows) {
     puts(" A's cols must be greater or equal to the rows");
@@ -483,53 +483,63 @@ void gauss_j(MatrixD A, MatrixD B) {
 
     /*for the proc that has the pivot row to send. Copy that row and bcast it to everyone... for A and B */
     MPI_Barrier(world);
-    if (rank == pivotTracker[k]) {
+    double denom;
+    int skipRow= -1 ; // assume all nodes are skipping until we figure out which node is sending
+
+    if (rank == pivotTracker[k] ) {
       // printf("Enter rank = %d pivot tracker = %d , k = %d localCount = %d\n",rank ,pivotTracker[k] , k, localCount);
       for (int i = 0; i < localA.cols; i++) {
         pivotRow[i] = ACCESS(localA, localCount, i);
-        // printf("rank = %d  arr[i] = %f , k = %d localCount=%d i=%d\n", rank ,ACCESS(localA, localCount, i), k , localCount, i );
+        // printf(" k = %d rank = %d  arr[i] = %f , localCount=%d i=%d\n", k,rank ,ACCESS(localA, localCount, i) , localCount, i );
       }
       // char* buf = bufArr(pivotRow, localA.cols);
       // printf("k= %d Rank %d has pivot row: %s\n", k, rank, buf); free(buf);
 
-
       for(int i =0 ;i< localB.cols;i++){
         pivotRow_B[i] = ACCESS(localB, localCount, i);
+        // printf("k= %d Enter rank = %d pivotRow_B[i] = %f \n",k, rank, pivotRow_B[i]);
+
       }
+      denom = pivotRow[k];
+      // printf("k= %d Enter rank = %d denom = %f \n",k, rank, denom);
+
 
       // char* buf = bufArr(pivotRow_B, localB.cols);
-      // printf("It %d Rank %d has pivot row: %s\n", k, rank, buf); 
+      // printf("k=%d Rank=%d has pivot row: %s\n", k, rank, buf); 
 
-
+      skipRow = localCount;
       localCount++;
       // if(localCount == localA.rows) localCount =0;
     }
 
+    MPI_Barrier(world);
+    MPI_Bcast(&denom, 1 , MPI_DOUBLE, pivotTracker[k], world);
     MPI_Bcast(pivotRow, localA.cols, MPI_DOUBLE, pivotTracker[k], world);
     MPI_Bcast(pivotRow_B, localB.cols, MPI_DOUBLE, pivotTracker[k], world);
-    // if(rank ==ROOT){
+    if(rank ==ROOT){
+      // char *arrbuf = bufArr(pivotRow, localA.cols);
+      // printf("k= %d Rank %d received %s\n", k, rank, arrbuf);
 
-    //   char *arrbuf = bufArr(pivotRow, localA.cols);
-    //   printf("k= %d Rank %d received %s\n", k, rank, arrbuf);
-    // }
+        // char *arrbuf = bufArr(pivotRow_B, localB.cols);
+        // printf("k= %d Rank %d received %s\n", k, rank, arrbuf);
+    }
 
-    // char *arrbuf = bufArr(pivotRow_B, localB.cols);
-    // printf("it %d Rank %d received %s\n", k, rank, arrbuf);
 
     MPI_Barrier(world);
     //All nodes have pivot row which has the pivot in it which corresponds to the K loop 
-    double denom = pivotRow[k];
-    if(rank == 0){
-      printf("k= %d Enter rank = %d denom = %f \n",k, rank, denom);
-    }
+    // double denom = pivotRow[k];
+    // if(rank == 2){
+    //   printf("k= %d Enter rank = %d denom = %f \n",k, rank, denom);
+    // }
 
     // todo broadcast the pivot 
 
 
-  // // everyone allocate their local version of l and compute 
+    // // everyone allocate their local version of l and compute 
     double *l =  malloc(localA.rows *  sizeof(double));  
+
     for (int i = 0; i < localA.rows; i++) {  // compute l
-      l[i] = ACCESS(localA, i, k) / denom;
+      l[i] = ACCESS(localA, i , k) / denom;
       // printf("k=%d rank = %d l[i] = %f num = %f denom = %f \n",k,rank, l[i], ACCESS(localA, i , k ),  denom);
     }
     MPI_Barrier(world);
@@ -541,46 +551,89 @@ void gauss_j(MatrixD A, MatrixD B) {
 
     /* every node computes their "new" local version of A and B using the pivotrow information */
 
-    // if (rank != pivotTracker[k] ) { 
+    if (rank != pivotTracker[k] ) { 
     // printf("k=%d rank =%d localCount=%d localrows=%d \n", k ,rank,localCount,localA.rows);
-    if ( k==0   ) { 
-      for (int row = localCount; row < localA.rows; row++) {
+    
+      // printf("rank = %d row=%d\n",rank,localA.rows);
+      // while(row < localA.rows){
+      for (int row = 0; row < localA.rows; row++) {
         for (int cols = 0; cols < localA.cols; cols++) {
           ACCESS(localA, row, cols) = ACCESS(localA, row, cols) - (l[row] * pivotRow[cols]);
           // printf( " k= %d rank = %d arr= %f  - l[i]=%f pivotRow[i]=%f \n",k, rank, ACCESS(localA, row, cols), l[row], pivotRow[cols]);
           // printf( "rank = %d Ans= %f\n",rank, ACCESS(localA, row, cols) );
         }
-        puts("");
+        // puts("");
 
-        // TODO : look at the indexing 
-        for (int col = 0; col < localB.cols; col++) {
-          localB.data[col] = localB.data[row] - ( l[row]* pivotRow_B[col]);
+        for (int col = 0; col < localB.cols; col++) { 
+        //  if(k==2){
+          // printf("k=%d rank=%d  ans=%f l[row]=%f pivotRow_B[cols] =%f \n",k,rank, localB.data[row] , l[row],  pivotRow_B[col]);
+        //  }
+          localB.data[row] = localB.data[row] - ( l[row] * pivotRow_B[col]);
           // printf("k = %d Rank = %d ans=%f l[col]=%f localB.data[row] = %f pivotRow_B[col]=%f \n", k, rank, localB.data[col],localB.data[row], l[row], pivotRow_B[col]);
           // printf("Rank = %d Ans= %f\n", rank, localB.data[col]);
+          // printf("Rank = %d localB.data[col]=%f localB.data[row]=%f\n" ,rank, localB.data[col],localB.data[row]);
+        //  if(k==1 && rank==0){
+        //     printf("k=%d rank=%d  ans=%f l[row]=%f pivotRow_B[cols] =%f \n",k,rank, localB.data[row] , l[row],  pivotRow_B[col]);
+        //  }
         }
-      }
+        // puts("");
+        // row++;
+      }// end of rows for loop 
       // if(rank ==ROOT){
       //   printf("k= %d rank == %d \n",k,rank);
       //   printMatrxD(localA);
 
       //   }
 
+    }// end of r!= k 
+    else if ( rank == pivotTracker[k]){
+      for (int row = 0; row < localA.rows; row++) {
+        if(row != skipRow){
+            for (int cols = 0; cols < localA.cols; cols++) {
+              ACCESS(localA, row, cols) = ACCESS(localA, row, cols) - (l[row] * pivotRow[cols]);
+              // printf( " k= %d rank = %d arr= %f  - l[i]=%f pivotRow[i]=%f \n",k, rank, ACCESS(localA, row, cols), l[row], pivotRow[cols]);
+              // printf( "rank = %d Ans= %f\n",rank, ACCESS(localA, row, cols) );
+            }
+            // puts("");
 
-      //   if(rank ==1){
-      //   printf("k= %d rank == %d \n",rank );
+            for (int col = 0; col < localB.cols; col++) { 
+            //  if(k==2){
+              // printf("k=%d rank=%d  ans=%f l[row]=%f pivotRow_B[cols] =%f \n",k,rank, localB.data[row] , l[row],  pivotRow_B[col]);
+            //  }
+              localB.data[row] = localB.data[row] - ( l[row] * pivotRow_B[col]);
+              // printf("k = %d Rank = %d ans=%f l[col]=%f localB.data[row] = %f pivotRow_B[col]=%f \n", k, rank, localB.data[col],localB.data[row], l[row], pivotRow_B[col]);
+              // printf("Rank = %d Ans= %f\n", rank, localB.data[col]);
+              // printf("Rank = %d localB.data[col]=%f localB.data[row]=%f\n" ,rank, localB.data[col],localB.data[row]);
+            }
+            // puts("");
+            // row++;
+          }// end 
 
+        }
 
-      //   printMatrxD(localA);
-
-      //   }
-
-
-      //   if(rank ==2){
-      //     printf("k= %d rank == %d \n",k,rank);
-      //     printMatrxD(localA);
-
-      //   }
     }
+    
+
+    // if(rank ==0){
+    //     printf("k= %d rank == %d \n",k,rank );
+    //     printMatrxD(localA);
+
+    //   }
+    //   if(rank ==1){
+    //     printf("k= %d rank == %d \n",k,rank );
+
+    //     printMatrxD(localA);
+
+    //   }
+
+
+
+    //   if(rank ==2){
+    //     printf("k= %d rank == %d \n",k,rank );
+
+    //     printMatrxD(localA);
+
+    // }
 
   
     
@@ -591,7 +644,6 @@ void gauss_j(MatrixD A, MatrixD B) {
     // sleep(1);
     // puts("");
 
-    
   }// end of outer k loop 
 
   // char *arrbuf = bufArr(localB.data,localB.rows);
@@ -613,43 +665,68 @@ void gauss_j(MatrixD A, MatrixD B) {
 
   // }
 
-  // /* scale each row of A and b - divide the pivots by themselves to equal 1 */
-  // for(int i =0 ; i< localA.rows ;i++){
-  //   double pivot;
-  //   pivot = localA.data [ rank + i];
-  //   // printf(" Rank = %d pivot= %f index = %d \n" ,rank, pivot, rank + i);
-  //   ACCESS(localA, i, rank + i) /= pivot;
+  /* gather the A matrix back to the root */
 
+  MatrixD newA; 
+  newA.rows = A.rows;
+  newA.cols = A.cols;
 
-  //   for(int j =0 ; j< localB.cols ; j++){
-  //     printf("arr= %f pivot=%f\n",ACCESS(localB, i , j) , pivot );
-  //     ACCESS(localB, i , j) /=pivot;
+  if(rank == ROOT){
+    newA.data = malloc(newA.rows * newA.cols * sizeof(double));
+  }else{
+    newA.data= NULL;
+  }
 
-  //   }
-
-  // }
+  MPI_Gatherv(
+      localA.data,  // sendbuf - address of send buffer,
+      A_counts.cnts[rank],  // sendcut-number of elements in send buffer( array )
+      MPI_DOUBLE,          // stype - data type of send buff elements
+      newA.data,           // rbuf - address of receive containter
+      A_counts.cnts,  // recvcount- arr of size amount being received from each process
+      A_counts.displs,  // displs
+      MPI_DOUBLE,           // data type of recv buffer
+      ROOT, world);
 
 
   /* gather the b vector back to the root */
 
-  // MatrixD result; 
-  // result.rows = B.rows;
-  // result.cols = B.cols;
-  // if(rank == ROOT){
-  //   result.data = malloc(result.rows * result.cols * sizeof(double));
-  // }else{
-  //   result.data= NULL;
-  // }
+  MatrixD result; 
+  result.rows = B.rows;
+  result.cols = B.cols;
+  if(rank == ROOT){
+    result.data = malloc(result.rows * result.cols * sizeof(double));
+  }else{
+    result.data= NULL;
+  }
 
-  // MPI_Gatherv(
-  //     localB.data,  // sendbuf - address of send buffer,
-  //     B_counts.cnts[rank],  // sendcut-number of elements in send buffer( array )
-  //     MPI_DOUBLE,          // stype - data type of send buff elements
-  //     result.data,           // rbuf - address of receive containter
-  //     B_counts.cnts,  // recvcount- arr of size amount being received from each process
-  //     B_counts.displs,  // displs
-  //     MPI_DOUBLE,           // data type of recv buffer
-  //     ROOT, world);
+  MPI_Gatherv(
+      localB.data,  // sendbuf - address of send buffer,
+      B_counts.cnts[rank],  // sendcut-number of elements in send buffer( array )
+      MPI_DOUBLE,          // stype - data type of send buff elements
+      result.data,           // rbuf - address of receive containter
+      B_counts.cnts,  // recvcount- arr of size amount being received from each process
+      B_counts.displs,  // displs
+      MPI_DOUBLE,           // data type of recv buffer
+      ROOT, world);
+
+
+
+  // /* scale each row of A and b - divide the pivots by themselves to equal 1 */
+    if(rank ==ROOT){
+      int indexB = 0;
+      for(int i =0 ; i < newA.rows* newA.cols   ;i+=A.cols +1){
+        double pivot = newA.data[i];
+        // printf("piv= %f result.data[indexB]=%f \n",pivot, result.data[indexB]);
+        
+        result.data[indexB] = result.data[indexB]  / pivot;
+        // printf("ans= %f \n",result.data[indexB]);
+      
+        indexB++;
+      }
+    }
+   
+
+
 
 
   // // printf("row=%d cols=%d ",result.rows , result.cols);
@@ -664,7 +741,7 @@ void gauss_j(MatrixD A, MatrixD B) {
   // }
 
 
-  // return result;
+  return result;
   
 
 
