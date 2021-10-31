@@ -1,9 +1,10 @@
 
 /*
 
-Chloe VanCory
-Lab 3
-
+  Chloe VanCory & Kalyn Howes 
+  COSC 420 
+  10.31.21
+  Lab 3 - Algorithm 1 Gauss-Jordan Elimination
 
 */
 
@@ -25,72 +26,61 @@ int main(int argc, char** argv) {
   MPI_Comm_size(world, &worldSize);
   MPI_Comm_rank(world, &rank);
   MPI_Get_processor_name(name, &nameLen);
-
-  
-
-  // int i;
-  // initial set up of creating and filling Matrix A & B
-  int rows = 5;
-  int cols = 5;
-  MatrixD A, B; 
-
-  if (rank == ROOT) {
-    A.rows = rows;
-    A.cols = cols;
-    A.data = malloc(A.rows * A.cols * sizeof(double));
-
-    B.rows = rows;
-    B.cols = cols;
-    B.data = malloc(B.rows * B.cols * sizeof(double));
-
-    int count = 1;
-    for (int i = 0; i < rows; i++) {
-      for (int j = 0; j < cols; j++) {
-        // ACCESSA(A,i,j) = rand() % 100;
-        // ACCESSB(B,i,j) = rand() % 100;
-
-        ACCESS(A, i, j) = count;
-        ACCESS(B, i, j) = count;
-        count++;
-      }
-    }
-
-    for (int i = 0; i < rows; i++) {
-      for (int j = 0; j < cols; j++) {
-        // printf("%4f ", ACCESS(A, i, j));
-        // printf("%4f ", ACCESS(B, i, j));
-
-      }
-      // printf("\n");
-    }
-  } else if (rank != ROOT) {
-    // for all other nodes define what A is for them, prevents seg faults
-    A.data = NULL;
-    A.rows = rows;
-    A.cols = cols;
-
-    B.data = NULL;
-    B.rows = rows;
-    B.cols = cols;
-  }
-
-  // printf("rank = %d \n", rank);
-  Vector b;
-  b.length = rows;
-
-  if(rank == ROOT){
-    b.data = malloc(rows * sizeof(double));
-    int count=1;
-    for(int i =0; i< rows ; i++){
-      b.data[i] = count++;
-    }
-  }
+  MPI_File fh;
 
 
+  char * fname = "output.txt";
+  MPI_File_open(
+    world,  // comm
+    fname,  // filename
+    MPI_MODE_CREATE | MPI_MODE_RDWR, // mode
+    MPI_INFO_NULL, // info structure
+    &fh );
+
+ 
+  // MatrixD A, B; 
+//   A.rows = 5;
+//   A.cols = 5;
+//   B.rows = 5;
+//   B.cols = 1;
+
+//   if (rank == ROOT) {
+//     A.data = malloc(A.rows * A.cols * sizeof(double));
+//     B.data = malloc(B.rows * B.cols * sizeof(double));
+
+//     int count = 1;
+//     for (int i = 0; i < A.rows* A.cols; i++) {
+//       A.data[i] = count++;
+//     }
+
+//     count = 1;
+//     for(int i =0; i< B.cols* B.rows ;i++){
+//       B.data[i] = count++;
+
+//     }
+
+//   } else  {
+//     A.data = NULL;
+//     B.data = NULL;
+//   }
+
+// if(rank ==ROOT){
+//     printf("Testing GJ\n");
+//     printf("Printing Matricies\n");
+//     printMatrxD(A);
+//     puts("");
+//     printMatrxD(B);
+//     puts("");
+
+//   }
+//   gauss_j(A,B);
 
 
-  /* when calling make sure there are no 0's off the main diag*/
-  // gauss_j(A,b);
+//   if(rank ==ROOT){
+//     printf("RESULT MATRIX\n");
+//     printMatrxD(result);
+//   }
+
 
 
 
@@ -117,7 +107,7 @@ int main(int argc, char** argv) {
   }
 
 
-  puts("");
+  // puts("");
 
   MatrixD vectorB;
   vectorB.rows = 3;
@@ -134,12 +124,66 @@ int main(int argc, char** argv) {
   }else{
     vectorB.data =NULL;
   }
+
+  if(rank ==ROOT){
+    printf("Testing GJ\n");
+    printf("Printing Matricies\n");
+    printMatrxD(C);
+    puts("");
+    printMatrxD(vectorB);
+    puts("");
+
+  }
+
+    //  result =
+   gauss_j(C,vectorB);
+
+
+  // if(rank ==ROOT){
+  //   printf("RESULT MATRIX\n");
+  //   printMatrxD(result);
+  // }
+
+
+  // MatrixD E, vectorC ;
+  // E.rows = 5;
+  // E.cols = 5;
+  // vectorC.rows= 5;
+  // vectorC.cols= 1;
+
+  // if(rank == ROOT){
+  //   E.data = malloc(E.cols * E.rows *sizeof(double));
+  //   int hardCoded[] = {1,2,3,6,5,
+  //                       0,3,2,2,3,
+  //                       -1,3,4,3,5,
+  //                       0,3,2,4,3,
+  //                       1,6,3,8,-3};
+  //   for(int i =0; i < E.cols * E.rows; i++ ){
+  //     E.data[i] = hardCoded[i];
+  //   }
+
+  //   int hardCoded2[] = {192,46,23,384,960 };
+  //   for(int i =0; i < vectorC.rows*vectorC.cols ;i++){
+  //     vectorC.data[i] = hardCoded2[i];
+
+  //   }
+
+  // }else{
+  //   E.data = NULL;
+  // }
+
+  // if(rank ==ROOT){
+  //   // printf("Testing GJ\n");
+  //   // printf("Printing Matricies\n");
+  //   // printMatrxD(E);
+  //   // puts("");
+  //   // printMatrxD(vectorC);
+  //   // puts("");
+
+  // }
+
+  //  gauss_j(E,vectorC);
   
- 
-
-  gauss_j(C,vectorB);
-
-
 
 
 
